@@ -13,14 +13,20 @@ final class BarFold: NSObject, NSApplicationDelegate {
 
     private let toggleName = "BarFoldArrow"
     private let dividerName = "BarFoldSeparator"
+    private let defaultArrowPosition = 240
+    private let dividerOffset = 45
+
+    private func positionKey(for name: String) -> String {
+        "NSStatusItem Preferred Position " + name
+    }
 
     private func registerInitialPositions() {
         // AppKit restores these offsets from the right edge by autosave name.
         // Place a fresh pair near the right end, clear of the notch.
         let defaults = UserDefaults.standard
         defaults.register(defaults: [
-            "NSStatusItem Preferred Position " + toggleName: 240,
-            "NSStatusItem Preferred Position " + dividerName: 285,
+            positionKey(for: toggleName): defaultArrowPosition,
+            positionKey(for: dividerName): defaultArrowPosition + dividerOffset,
         ])
     }
 
@@ -32,17 +38,32 @@ final class BarFold: NSObject, NSApplicationDelegate {
         toggleItem.button?.action = #selector(toggleClicked(_:))
         toggleItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
-        dividerItem = statusBar.statusItem(withLength: dividerWidth)
-        dividerItem.autosaveName = dividerName
-        dividerItem.button?.title = "│"
-        dividerItem.button?.toolTip = "按住 ⌘ 拖动分隔线。左边的图标可以折叠。"
-        dividerItem.button?.setAccessibilityLabel("BarFold 分隔线")
+        createDivider()
         updateToggle()
 
         if !UserDefaults.standard.bool(forKey: "DidShowBarFoldControls") {
             UserDefaults.standard.set(true, forKey: "DidShowBarFoldControls")
             showControls()
         }
+    }
+
+    private func createDivider() {
+        dividerItem = statusBar.statusItem(withLength: dividerWidth)
+        dividerItem.autosaveName = dividerName
+        dividerItem.button?.title = "│"
+        dividerItem.button?.toolTip = "按住 ⌘ 拖动分隔线。左边的图标可以折叠。"
+        dividerItem.button?.setAccessibilityLabel("BarFold 分隔线")
+    }
+
+    @objc private func resetDividerPosition() {
+        setCollapsed(false)
+        // AppKit restores the saved position when the named status item is created.
+        statusBar.removeStatusItem(dividerItem)
+        dividerItem = nil
+        let defaults = UserDefaults.standard
+        let arrowPosition = defaults.integer(forKey: positionKey(for: toggleName))
+        defaults.set(arrowPosition + dividerOffset, forKey: positionKey(for: dividerName))
+        createDivider()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -108,8 +129,9 @@ final class BarFold: NSObject, NSApplicationDelegate {
                 "在屏幕右上方找竖线和箭头。按住 ⌘ 拖动竖线，把要隐藏的图标放在它左边，箭头留在右边。")
             help.maximumNumberOfLines = 0
             let toggle = NSButton(title: "", target: self, action: #selector(toggleFromWindow))
+            let reset = NSButton(title: "重置竖线位置", target: self, action: #selector(resetDividerPosition))
             let quit = NSButton(title: "退出 BarFold", target: NSApp, action: #selector(NSApplication.terminate(_:)))
-            let buttons = NSStackView(views: [toggle, quit])
+            let buttons = NSStackView(views: [toggle, reset, quit])
             buttons.spacing = 8
             let stack = NSStackView(views: [help, buttons])
             stack.orientation = .vertical
